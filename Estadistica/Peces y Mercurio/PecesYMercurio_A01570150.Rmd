@@ -1,0 +1,175 @@
+---
+title: 'Los peces y el mercurio (Momento de Retroalimentación: Módulo 5 Procesamiento
+  de datos multivariados. Portafolio Implementación)'
+author: "Andres Piñones Besnier - A01570150"
+date: "2022-12-1"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+LINK AL DRIVE: https://drive.google.com/drive/folders/1g5PrEp-furYdtaoqstIQTF9tVkJo5vtL?usp=sha
+ring
+
+## EL PROBLEMA
+
+La contaminación por mercurio de peces en el agua dulce comestibles es una amenaza directa contra nuestra salud. Se llevó a cabo un estudio reciente en 53 lagos de Florida con el fin de examinar los factores que influían en el nivel de contaminación por mercurio. Las variables que se midieron se encuentran en mercurio.csvDescargar mercurio.csv  y su descripción es la siguiente: 
+
+Para este reporte se realizará un análisis de datos multivariados haciendo uso de pruebas de normalidad, análisis de componentes principales matrices y vectores aleatorios.
+
+* X1 = número de identificación
+* X2 = nombre del lago
+* X3 = alcalinidad (mg/l de carbonato de calcio)
+* X4 = PH
+* X5 = calcio (mg/l)
+* X6 = clorofila (mg/l)
+* X7 = concentración media de mercurio (parte por millón) en el tejido muscular del grupo de peces estudiados en cada lago
+* X8 = número de peces estudiados en el lago
+* X9 = mínimo de la concentración de mercurio en cada grupo de peces
+* X10 = máximo de la concentración de mercurio en cada grupo de peces
+* X11 = estimación (mediante regresión) de la concentración de mercurio en el pez de 3 años (o promedio de mercurio cuando la edad no está disponible)
+* X12 = indicador de la edad de los peces (0: jóvenes; 1: maduros)
+
+```{r}
+D <- read.csv(file = 'mercurio.csv')
+id = D$X1 
+nombre = D$X2 
+alcalinidad = D$X3 
+ph = D$X4
+calcio = D$X5
+clorofila = D$X6
+mediaMercurio = D$X7
+numPeces = D$X8
+minMercurio = D$X9
+maxMercurio = D$X10
+estimacion = D$X11
+madurez = D$X12 
+
+colnames(D) <- c("id", "nombre", "alcalinidad", "ph","calcio","clorofila","mediaMercurio","numPeces","minMercurio","maxMercurio","estimacion","madurez")
+
+#por cuestiones de análisis removemos el ID y el Nombre en otro dataset
+aD <- D[,c(-1,-2)]
+```
+
+## Análisis de normalidad de las variables continuas para identificar variables normales. 
+
+Realizamos la prueba de normalidad de Mardia y la prueba de Anderson Darling para identificar las variables que son normales y detectar posible normalidad multivariada de grupos de variables.
+
+```{r}
+library(MVN)
+## Test de Multinormalidad: Método Sesgo y kurtosis de Mardia
+mvn(aD, subset = NULL, mvn = "mardia")
+```
+
+Ahora realizamos la prueba de Mardia y Anderson Darling de las variables que sí tuvieron normalidad en los incisos anteriores. En este caso las variables que presentaron normalidad fueron ph y maxMercurio.
+
+```{r}
+data<-(aD[,c(2,8)])
+mvn(data, subset = NULL, mvn = "mardia")
+```
+
+Respecto a los resultados obtenidos en Mardia Skewness y Mardia Kurtosis tenemos un valor de p mayor a 0.05 que usamos como nivel de significancia, por lo tanto no se rechaza H_0 y se puede asumir los datos tienen normal multivariada.
+
+Buscaremos datos atípicos o influyentes en la normal multivariada encontrada en el inciso B por medio de la distancia de Mahalanobis y del gráfico QQplot multivariado.
+
+```{r}
+mu <- colMeans(data)
+sigma <- cov(data)
+dist <- mahalanobis(data, mu, sigma)
+
+
+df <- ncol(data)
+n <- length(dist)
+u <- ((1:n)-0.5)/n
+p <- qchisq(u,df)
+distsorted <- sort(dist)
+
+plot(distsorted,p, 
+     col="black",
+     main="QQ Plot of mahalanobis distance v chisq quantiles")
+abline(0,1, col="red")
+```
+```{r}
+library(MASS)
+data.kde <- kde2d(data[,1], data[,2], n = 53,lims = c(range(3,10),range(-1,3))) 
+contour(data.kde)
+```
+
+
+Como se puede ver en el gráfico existen algunos valores atípicos. Volveremos a realizar la prueba pero ahora sin datos atípicos.
+
+```{r}
+mvn(data, subset = NULL, mvn = "mardia", showOutliers = FALSE)
+```
+
+## Análisis de componentes principales 
+
+Realizamos el análisis de componentes principales con la base de datos completa para identificar los factores principales que intervienen en el problema de la contaminación por mercurio de los peces en agua dulce.
+
+El analisis de componentes principales simplifica la complejidad de datos de varias dimensiones manteniendo tendencias y patrones. Con el análisis transformamos los datos y reducimos la dimensión lo que permite sumarizar las variables. En este caso nos permite identificar que variabes estan relacionadas y analizar de mejor manera su comportamiento y de esta forma acercarnos más a identificar que variables intervienen en la contaminación por mercurio.
+
+```{r}
+R = cor(aD)
+```
+
+Realizamos el análisis de componentes principales 
+
+```{r}
+PR = eigen(R)
+lambdasR = PR$values
+varTotalR = sum(diag(R))
+propR = lambdasR/varTotalR
+cumsum(propR)
+```
+
+De acuerdo a los resultados se puede optar por emplear los primeros 5 componentes ya que con ellos es posible explicar un poco más del 92% de la varianza observada. De ahí en adelante los demás tienen diferencia no muy significativa.
+
+Gráfico de los vectores asociados a las variables y puntuaciones de las observaciones de las dos primeras componentes
+
+```{r}
+library(stats)
+library(factoextra)
+library(ggplot2)
+datos=aD
+cpR=princomp(datos,cor=TRUE)
+cpaR=as.matrix(datos)%*%cpR$loadings
+plot(cpaR[,1:2],type="p", main = "Mat de Correlación")
+text(cpaR[,1],cpaR[,2],1:nrow(cpaR))
+biplot(cpR)
+```
+
+```{r}
+library(FactoMineR)
+library(factoextra)
+library(ggplot2) 
+datos=aD
+cp3 = PCA(datos)
+```
+
+```{r}
+fviz_pca_ind(cp3, col.ind = "blue", addEllipses = TRUE, repel = TRUE)
+
+fviz_eig(cp3,addlabels = TRUE)
+
+fviz_contrib(cp3, choice = c("var"))
+```
+
+
+
+## Resultados
+
+En el scree plot es posible visualizar que utilizar hasta el 5to componente principal como se mencionó anteriormente nos permite explicar aproximadamente el 93.3% de la varianza observada. Sin embargo el primer componente tiene una gran diferencia de peso comparado con los demás.
+
+En el otro gráfico circular de las variables podemos interpretar la correlación entre las variables.
+Variables correlacionadas positivamente estan agrupadas.
+Variables con correlación negativa se posicionan en cuadrantes opuestos.
+Las distancias entre las variables y el origen miden la calidad de la variable en el mapa de factores.
+Las más alejadas del origen estan mejor representadas.
+
+### Emite una conclusión general: 
+Por medio de estas nuevas herramientas de análisis pudimos hacer un acercamiento con otra metodología para intentar nuevamente encontrar las relaciones entre las variables de esta base de datos y determinar los factores que afectan el nivel de mercurio en el agua. Se pudo robustecer el análisis realizado anteriormente y llegar a conclusiones similares.
+Este análisis y sus resultados combinado con lo obtenido en el anterior nos permite confirmar que hay una relación entre el ph, alcalinidad y calcio con el nivel de mercurio. Sin embargo por medio del analisis de normalidad multivariada pudimos observar que existe una relación entre el ph y el mercurio, relacionada con la alcalinidad.
